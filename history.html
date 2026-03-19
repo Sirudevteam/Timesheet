@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance History | Blitz & Glitz Attendance System</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts - Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Scripts -->
+    <script src="js/supabaseClient.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        async function initHistoryPage() {
+            const content = document.getElementById('mainContent');
+            
+            // Get current month range
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            const endOfMonth = new Date();
+            endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+            endOfMonth.setDate(0);
+            
+            content.innerHTML = `
+                <div class="animate-slide-up">
+                    <!-- Date Filter -->
+                    <div class="card" style="margin-bottom: var(--space-6);">
+                        <div class="card-body">
+                            <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: flex-end;">
+                                <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 180px;">
+                                    <label class="form-label">From Date</label>
+                                    <input type="date" class="form-input" id="historyStartDate" 
+                                        value="${startOfMonth.toISOString().split('T')[0]}">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 180px;">
+                                    <label class="form-label">To Date</label>
+                                    <input type="date" class="form-input" id="historyEndDate" 
+                                        value="${endOfMonth.toISOString().split('T')[0]}">
+                                </div>
+                                <button class="btn btn-primary" onclick="loadHistoryData()">
+                                    <i class="fas fa-search"></i> View History
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Calendar View -->
+                    <div class="card" style="margin-bottom: var(--space-8);">
+                        <div class="card-header">
+                            <h3 class="card-title">Attendance Calendar</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="calendarView">
+                                <div class="loading" style="padding: var(--space-12);"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detailed List -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Detailed Records</h3>
+                                <p class="card-subtitle">Complete attendance history</p>
+                            </div>
+                            <button class="btn btn-secondary" onclick="exportMyHistory()">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container" id="historyTableContainer">
+                                <div class="loading" style="padding: var(--space-12);"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            await loadHistoryData();
+        }
+        
+        async function loadHistoryData() {
+            const startDate = document.getElementById('historyStartDate').value;
+            const endDate = document.getElementById('historyEndDate').value;
+            
+            const history = await attendance.getByDateRange(startDate, endDate);
+            
+            renderCalendar(history, startDate, endDate);
+            renderHistoryTable(history);
+        }
+        
+        function renderCalendar(records, startDate, endDate) {
+            const container = document.getElementById('calendarView');
+            
+            // Create a simple calendar view
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const days = [];
+            
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const dateStr = d.toISOString().split('T')[0];
+                const record = records.find(r => r.date === dateStr);
+                
+                days.push({
+                    date: new Date(d),
+                    dateStr,
+                    record
+                });
+            }
+            
+            // Group by month
+            const months = {};
+            days.forEach(day => {
+                const monthKey = day.date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                if (!months[monthKey]) months[monthKey] = [];
+                months[monthKey].push(day);
+            });
+            
+            container.innerHTML = Object.entries(months).map(([month, monthDays]) => `
+                <div style="margin-bottom: var(--space-6);">
+                    <h4 style="margin-bottom: var(--space-4); color: var(--gray-700);">${month}</h4>
+                    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2);">
+                        ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `
+                            <div style="text-align: center; font-size: 0.75rem; font-weight: 600; color: var(--gray-500); padding: var(--space-2);">
+                                ${d}
+                            </div>
+                        `).join('')}
+                        ${monthDays.map(day => {
+                            const status = day.record?.status;
+                            const colors = {
+                                present: 'var(--success)',
+                                absent: 'var(--danger)',
+                                late: 'var(--warning)',
+                                half_day: 'var(--info)'
+                            };
+                            const bgColors = {
+                                present: 'var(--success-light)',
+                                absent: 'var(--danger-light)',
+                                late: 'var(--warning-light)',
+                                half_day: 'var(--info-light)'
+                            };
+                            
+                            return `
+                                <div style="
+                                    aspect-ratio: 1;
+                                    display: flex;
+                                    flex-direction: column;
+                                    align-items: center;
+                                    justify-content: center;
+                                    border-radius: var(--radius-lg);
+                                    background: ${status ? bgColors[status] : 'var(--gray-100)'};
+                                    color: ${status ? colors[status] : 'var(--gray-400)'};
+                                    font-size: 0.875rem;
+                                    cursor: ${status ? 'pointer' : 'default'};
+                                    transition: all var(--transition-fast);
+                                " ${status ? `onclick="showDayDetails('${day.dateStr}')"` : ''}>
+                                    <span style="font-weight: 600;">${day.date.getDate()}</span>
+                                    ${status ? `<i class="fas fa-${status === 'present' ? 'check' : status === 'absent' ? 'times' : status === 'late' ? 'clock' : 'adjust'}" style="font-size: 0.625rem; margin-top: 2px;"></i>` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderHistoryTable(records) {
+            const container = document.getElementById('historyTableContainer');
+            
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <i class="fas fa-calendar-times"></i>
+                        </div>
+                        <h4 class="empty-title">No records found</h4>
+                        <p class="empty-description">No attendance records for the selected period</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Status</th>
+                            <th>Check In</th>
+                            <th>Check Out</th>
+                            <th>Work Hours</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${records.map(record => `
+                            <tr>
+                                <td>${attendance.formatDate(record.date)}</td>
+                                <td>${new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' })}</td>
+                                <td>
+                                    <span class="status-badge ${record.status}">
+                                        ${attendance.getStatusLabel(record.status)}
+                                    </span>
+                                </td>
+                                <td>${attendance.formatTime(record.check_in_time)}</td>
+                                <td>${attendance.formatTime(record.check_out_time)}</td>
+                                <td>${record.work_hours ? record.work_hours + ' hrs' : '-'}</td>
+                                <td>${record.notes || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        function showDayDetails(dateStr) {
+            showToast(`View details for ${dateStr} - Feature coming soon`, 'info');
+        }
+        
+        function exportMyHistory() {
+            const startDate = document.getElementById('historyStartDate').value;
+            const endDate = document.getElementById('historyEndDate').value;
+            
+            attendance.getByDateRange(startDate, endDate).then(records => {
+                admin.exportToCSV(records);
+            });
+        }
+        
+        window.initHistoryPage = initHistoryPage;
+        window.loadHistoryData = loadHistoryData;
+        window.exportMyHistory = exportMyHistory;
+        window.showDayDetails = showDayDetails;
+    </script>
+</body>
+</html>

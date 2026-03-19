@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | Blitz & Glitz Attendance System</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts - Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-logo">
+                    <img src="assets/logo.svg" alt="Blitz & Glitz Logo">
+                    <h1>Welcome Back!</h1>
+                    <p>Sign in to access your attendance dashboard</p>
+                </div>
+                
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label class="form-label required">Email Address</label>
+                        <div style="position: relative;">
+                            <i class="fas fa-envelope" style="position: absolute; left: var(--space-4); top: 50%; transform: translateY(-50%); color: var(--gray-400);"></i>
+                            <input type="email" class="form-input" id="email" 
+                                placeholder="you@blitzandglitz.com" required
+                                style="padding-left: var(--space-10);">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label required">Password</label>
+                        <div style="position: relative;">
+                            <i class="fas fa-lock" style="position: absolute; left: var(--space-4); top: 50%; transform: translateY(-50%); color: var(--gray-400);"></i>
+                            <input type="password" class="form-input" id="password" 
+                                placeholder="Enter your password" required
+                                style="padding-left: var(--space-10);">
+                            <button type="button" class="btn btn-ghost" 
+                                style="position: absolute; right: var(--space-2); top: 50%; transform: translateY(-50%); padding: var(--space-2);"
+                                onclick="togglePassword()">
+                                <i class="fas fa-eye" id="toggleIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-6);">
+                        <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+                            <input type="checkbox" style="width: 16px; height: 16px; accent-color: var(--primary);">
+                            <span style="font-size: 0.875rem; color: var(--gray-600);">Remember me</span>
+                        </label>
+                        <a href="#" onclick="showForgotPassword(); return false;" style="font-size: 0.875rem;">
+                            Forgot password?
+                        </a>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Sign In
+                    </button>
+                </form>
+                
+                <div class="login-footer">
+                    <p>Don't have an account? Contact your administrator</p>
+                    <p style="margin-top: var(--space-4);">
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="showConfigModal()">
+                            <i class="fas fa-cog"></i> Configure Database
+                        </button>
+                    </p>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: var(--space-6);">
+                <p style="font-size: 0.8125rem; color: var(--gray-500);">
+                    <i class="fas fa-shield-alt"></i> Secured by Supabase Auth
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <!-- Config Modal -->
+    <div class="modal-overlay" id="configModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Supabase Configuration</h3>
+                <button class="modal-close" onclick="hideConfigModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: var(--space-4); color: var(--gray-600);">
+                    Enter your Supabase project credentials. Get these from your 
+                    <a href="https://app.supabase.com" target="_blank">Supabase Dashboard</a>.
+                </p>
+                <div class="form-group">
+                    <label class="form-label required">Supabase URL</label>
+                    <input type="url" class="form-input" id="supabaseUrl" 
+                        placeholder="https://your-project.supabase.co">
+                </div>
+                <div class="form-group">
+                    <label class="form-label required">Anon Key</label>
+                    <input type="text" class="form-input" id="supabaseKey" 
+                        placeholder="your-anon-key">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideConfigModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveConfig()">
+                    <i class="fas fa-save"></i> Save & Continue
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="js/supabaseClient.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        // Toggle password visibility
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.classList.remove('fa-eye');
+                toggleIcon.classList.add('fa-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.classList.remove('fa-eye-slash');
+                toggleIcon.classList.add('fa-eye');
+            }
+        }
+        
+        // Show forgot password modal
+        function showForgotPassword() {
+            showToast('Please contact your administrator to reset your password', 'info');
+        }
+        
+        // Show config modal
+        function showConfigModal() {
+            document.getElementById('configModal').classList.add('active');
+            
+            // Pre-fill if exists
+            const config = supabaseClient.getConfig();
+            if (config.url && config.url.includes('supabase.co')) {
+                document.getElementById('supabaseUrl').value = config.url;
+            }
+        }
+        
+        // Hide config modal
+        function hideConfigModal() {
+            document.getElementById('configModal').classList.remove('active');
+        }
+        
+        // Save configuration
+        function saveConfig() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            
+            if (!url || !key) {
+                showToast('Please fill in all fields', 'warning');
+                return;
+            }
+            
+            if (!url.includes('supabase.co')) {
+                showToast('Please enter a valid Supabase URL', 'error');
+                return;
+            }
+            
+            supabaseClient.setConfig(url, key);
+            showToast('Configuration saved! Reloading...', 'success');
+            
+            setTimeout(() => location.reload(), 1000);
+        }
+        
+        // Check if already authenticated
+        (async () => {
+            const isAuthed = await auth.init();
+            if (isAuthed) {
+                auth.redirectBasedOnRole();
+            }
+        })();
+    </script>
+</body>
+</html>

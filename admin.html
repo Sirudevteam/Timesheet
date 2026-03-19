@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Management | Blitz & Glitz Attendance System</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts - Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Scripts -->
+    <script src="js/supabaseClient.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        // Admin-specific functionality
+        async function initAdminDashboard() {
+            const content = document.getElementById('mainContent');
+            
+            // Load summary data
+            const summary = await admin.getDashboardSummary();
+            
+            content.innerHTML = `
+                <div class="animate-slide-up">
+                    <!-- Summary Stats -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon present">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                            </div>
+                            <div class="stat-value">${summary?.totalUsers || 0}</div>
+                            <div class="stat-label">Total Team Members</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon total">
+                                    <i class="fas fa-user-check"></i>
+                                </div>
+                            </div>
+                            <div class="stat-value">${summary?.todayAttendance || 0}</div>
+                            <div class="stat-label">Marked Today</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon late">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                            </div>
+                            <div class="stat-value">${summary?.pendingAttendance || 0}</div>
+                            <div class="stat-label">Pending Today</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon absent">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </div>
+                            </div>
+                            <div class="stat-value">${summary?.monthAttendance || 0}</div>
+                            <div class="stat-label">Total Records (This Month)</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Today's Attendance -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Today's Attendance</h3>
+                                <p class="card-subtitle">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-secondary" onclick="refreshAdminData()">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button class="btn btn-primary" onclick="exportTodayData()">
+                                    <i class="fas fa-download"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container" id="todayTableContainer">
+                                <div class="loading" style="padding: var(--space-12);"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Team Members -->
+                    <div class="card" style="margin-top: var(--space-8);">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Team Members</h3>
+                                <p class="card-subtitle">Manage your team</p>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddUserModal()">
+                                <i class="fas fa-plus"></i> Add Member
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container" id="usersTableContainer">
+                                <div class="loading" style="padding: var(--space-12);"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Attendance Records -->
+                    <div class="card" style="margin-top: var(--space-8);">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">Attendance Records</h3>
+                                <p class="card-subtitle">View and manage all attendance</p>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-secondary" onclick="showFilters()">
+                                    <i class="fas fa-filter"></i> Filter
+                                </button>
+                                <button class="btn btn-primary" onclick="exportAllData()">
+                                    <i class="fas fa-file-csv"></i> Export CSV
+                                </button>
+                            </div>
+                        </div>
+                        <div class="filters-bar" id="filtersBar" style="display: none;">
+                            <div class="filter-group">
+                                <label class="filter-label">Member:</label>
+                                <select class="form-select" id="filterUser" style="width: 180px;">
+                                    <option value="">All Members</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Status:</label>
+                                <select class="form-select" id="filterStatus" style="width: 140px;">
+                                    <option value="">All Status</option>
+                                    <option value="present">Present</option>
+                                    <option value="absent">Absent</option>
+                                    <option value="late">Late</option>
+                                    <option value="half_day">Half Day</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">From:</label>
+                                <input type="date" class="form-input" id="filterStartDate">
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">To:</label>
+                                <input type="date" class="form-input" id="filterEndDate">
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="applyFilters()">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                            <button class="btn btn-ghost btn-sm" onclick="clearFilters()">
+                                Clear
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container" id="attendanceTableContainer">
+                                <div class="loading" style="padding: var(--space-12);"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Set default date range
+            const today = new Date().toISOString().split('T')[0];
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            
+            const startDateEl = document.getElementById('filterStartDate');
+            const endDateEl = document.getElementById('filterEndDate');
+            if (startDateEl) startDateEl.value = startOfMonth.toISOString().split('T')[0];
+            if (endDateEl) endDateEl.value = today;
+            
+            await loadAdminData();
+        }
+        
+        async function loadAdminData() {
+            // Load today's attendance
+            const todayData = await admin.getTodayTeamAttendance();
+            renderTodayTable(todayData);
+            
+            // Load users
+            const users = await admin.getAllUsers();
+            renderUsersTable(users);
+            
+            // Populate user filter
+            const filterUser = document.getElementById('filterUser');
+            if (filterUser) {
+                filterUser.innerHTML = '<option value="">All Members</option>' +
+                    users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+            }
+            
+            // Load attendance records
+            const attendance = await admin.getAllAttendance({
+                startDate: document.getElementById('filterStartDate')?.value,
+                endDate: document.getElementById('filterEndDate')?.value
+            });
+            renderAttendanceTable(attendance);
+        }
+        
+        function renderTodayTable(data) {
+            const container = document.getElementById('todayTableContainer');
+            
+            if (data.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <i class="fas fa-calendar-day"></i>
+                        </div>
+                        <h4 class="empty-title">No attendance yet</h4>
+                        <p class="empty-description">Team members haven't marked their attendance today</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Member</th>
+                            <th>Status</th>
+                            <th>Check In</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(record => `
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                        <div class="user-avatar" style="width: 36px; height: 36px; font-size: 0.75rem;">
+                                            ${auth.getUserInitials(record.users?.name)}
+                                        </div>
+                                        <span>${record.users?.name || 'Unknown'}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="status-badge ${record.status}">
+                                        ${attendance.getStatusLabel(record.status)}
+                                    </span>
+                                </td>
+                                <td>${attendance.formatTime(record.check_in_time)}</td>
+                                <td>${record.notes || '-'}</td>
+                                <td>
+                                    <button class="btn btn-ghost btn-sm" onclick="editAttendance('${record.id}')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        function renderUsersTable(users) {
+            const container = document.getElementById('usersTableContainer');
+            
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Joined</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${users.map(user => `
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--space-3);">
+                                        <div class="user-avatar" style="width: 36px; height: 36px; font-size: 0.75rem;">
+                                            ${auth.getUserInitials(user.name)}
+                                        </div>
+                                        <span>${user.name}</span>
+                                    </div>
+                                </td>
+                                <td>${user.email}</td>
+                                <td>
+                                    <span class="status-badge ${user.role === 'admin' ? 'info' : 'success'}">
+                                        ${user.role === 'admin' ? 'Admin' : 'Member'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="status-badge ${user.is_active ? 'success' : 'absent'}">
+                                        ${user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <button class="btn btn-ghost btn-sm" onclick="editUser('${user.id}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-sm" style="color: var(--danger);" 
+                                            onclick="deleteUser('${user.id}', '${user.name}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        function renderAttendanceTable(data) {
+            const container = document.getElementById('attendanceTableContainer');
+            
+            if (data.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <i class="fas fa-inbox"></i>
+                        </div>
+                        <h4 class="empty-title">No records found</h4>
+                        <p class="empty-description">Try adjusting your filters</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Member</th>
+                            <th>Status</th>
+                            <th>Check In</th>
+                            <th>Check Out</th>
+                            <th>Hours</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(record => `
+                            <tr>
+                                <td>${attendance.formatDate(record.date)}</td>
+                                <td>${record.users?.name || 'Unknown'}</td>
+                                <td>
+                                    <span class="status-badge ${record.status}">
+                                        ${attendance.getStatusLabel(record.status)}
+                                    </span>
+                                </td>
+                                <td>${attendance.formatTime(record.check_in_time)}</td>
+                                <td>${attendance.formatTime(record.check_out_time)}</td>
+                                <td>${record.work_hours || '-'}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <button class="btn btn-ghost btn-sm" onclick="editAttendance('${record.id}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-ghost btn-sm" style="color: var(--danger);"
+                                            onclick="deleteAttendanceRecord('${record.id}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        async function refreshAdminData() {
+            await loadAdminData();
+            showToast('Data refreshed', 'success');
+        }
+        
+        function showFilters() {
+            const bar = document.getElementById('filtersBar');
+            bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+        }
+        
+        async function applyFilters() {
+            const filters = {
+                userId: document.getElementById('filterUser').value,
+                status: document.getElementById('filterStatus').value,
+                startDate: document.getElementById('filterStartDate').value,
+                endDate: document.getElementById('filterEndDate').value
+            };
+            
+            const data = await admin.getAllAttendance(filters);
+            renderAttendanceTable(data);
+        }
+        
+        function clearFilters() {
+            document.getElementById('filterUser').value = '';
+            document.getElementById('filterStatus').value = '';
+            applyFilters();
+        }
+        
+        function exportTodayData() {
+            const todayData = admin.getTodayTeamAttendance();
+            admin.exportToCSV(todayData);
+        }
+        
+        function exportAllData() {
+            const allData = admin.getAllAttendanceList();
+            admin.exportToCSV(allData);
+        }
+        
+        function showAddUserModal() {
+            showToast('User creation requires Supabase Auth setup. Use your Supabase dashboard to add users.', 'info');
+        }
+        
+        function editUser(userId) {
+            showToast('Edit functionality coming soon', 'info');
+        }
+        
+        async function deleteUser(userId, name) {
+            if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+            
+            const result = await admin.deleteUser(userId);
+            if (result.success) {
+                await loadAdminData();
+            }
+        }
+        
+        function editAttendance(attendanceId) {
+            showToast('Edit functionality coming soon', 'info');
+        }
+        
+        async function deleteAttendanceRecord(attendanceId) {
+            if (!confirm('Are you sure you want to delete this record?')) return;
+            
+            const result = await attendance.delete(attendanceId);
+            if (result.success) {
+                await loadAdminData();
+            }
+        }
+        
+        // Override the init function for admin page
+        window.initAdminDashboard = initAdminDashboard;
+    </script>
+</body>
+</html>
